@@ -1,5 +1,14 @@
 pipeline {
-  agent any
+   agent {
+    docker {
+      image 'node:18-alpine' // Sử dụng Docker image có sẵn Node.js
+      args '-u root' // Chạy với quyền root nếu cần
+    }
+  }
+
+  environment {
+    CI = 'true' // Biến môi trường cho môi trường CI
+  }
 
   stages {
     stage('Checkout') {
@@ -10,13 +19,13 @@ pipeline {
 
     stage('Install Dependencies') {
       steps {
-        bat 'npm install' // Sử dụng bat thay vì sh trên Windows
+        sh 'npm ci --no-audit' // Sử dụng bat thay vì sh trên Windows
       }
     }
 
     stage('Run Tests') {
       steps {
-        bat 'npm test'
+        sh 'npm test'
       }
       post {
         always {
@@ -25,16 +34,23 @@ pipeline {
       }
     }
 
-    stage('Run Server') {
+    stage('Build') {
+      when {
+        branch 'main' // Chỉ build khi merge vào main
+      }
       steps {
-        bat 'start "Node Server" npm start' // Chạy server trong cửa sổ mới
+        sh 'npm run build' // Build ứng dụng
+        archiveArtifacts artifacts: 'dist/**/*' // Lưu artifacts
       }
     }
   }
 
   post {
     always {
-      bat 'taskkill /F /IM node.exe /T' // Đảm bảo dừng Node.js sau khi chạy
+      sh 'docker system prune -f' // Dọn dẹp Docker
+    }
+    failure {
+      slackSend color: 'danger', message: "Build ${env.BUILD_NUMBER} failed!"
     }
   }
 }
